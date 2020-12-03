@@ -72,6 +72,9 @@
 #define LED_BLINK_INTERVAL 200
 #define ANGLE_MAG_MAX_THRESHOLD 30
 #define MAX_ROTATION_ACQUIRE_CYCLES 400
+#define LOW_PASS_FILTER_FREQ 1
+#define HIGH_PASS_FILTER_FREQ 0.2
+#define FIXED_POINT_GAIN_SCALE 1024
 
 //#define NOT_DEBUGGING
 
@@ -256,7 +259,7 @@ void getAccel(void* handle, int* xyz) {
 	}
 }
 
-//Data updates every 50 milliseconds
+//Data updates every 50 milliseconds, may change to 20 depending on accuracy
 void updateData(void) {
 	if (dataACQ > 50) {
 		dataACQ = 0;
@@ -307,45 +310,163 @@ void updateData(void) {
 void Feature_Extraction_State_0(void* handle, int* ttt_1, int* ttt_2,
 	int* ttt_3, int* ttt_mag_scale) {
 
-	int ttt[3];
-	int ttt_initial[3];
-	int axis_index;
-	float accel_mag;
+	int ttt[3], ttt_prev_LP[3];
+	int ttt_filter_LP[3], ttt_filter_prev_LP[3];
+	int ttt_HP[3], ttt_prev_HP[3];
+	int ttt_filter_HP[3], ttt_filter_prev_HP[3];
+	int x_offset, y_offset, z_offset;
+	int axis_index, sample_index;
+	float disp_mag, disp_mag_start_threshold;
+	float disp[3], disp_prev[3];
 	char  msg[128];
+	float Tsample = 0.05; //Every 50 ms
+	float fo_HP = HIGH_PASS_FILTER_FREQ;
+	float Wo_HP, IWon_HP, iir_0_HP, iir_1_HP, iir_2_HP;
+	float fo_LP = LOW_PASS_FILTER_FREQ;
+	float Wo_LP, IWon_LP, iir_0_LP, iir_1_LP, iir_2_LP;
 
 
 	/*
-	 * Acquire acceleration values prior to motion
+	 * High Pass Filter coefficients
 	 */
 
-	getAccel(handle, ttt_initial);
 
-	sprintf(msg, "\r\nStart Motion to new Orientation when LED On");
-	CDC_Fill_Buffer((uint8_t*)msg, strlen(msg));
-	BSP_LED_On(LED1);
 
-	HAL_Delay(2000);
+	Wo_HP = 2 * 3.141592654 * fo_HP;
+	IWon_HP = 2 / (Wo_HP * Tsample);
+	iir_0_HP = 1 - (1 / (1 + IWon_HP));
+	iir_1_HP = -iir_0_HP;
+	iir_2_HP = (1 / (1 + IWon_HP)) * (1 - IWon_HP);
 
-	sprintf(msg, "\r\nEnd Motion");
-	CDC_Fill_Buffer((uint8_t*)msg, strlen(msg));
-	HAL_Delay(1000);
+	/*
+	 * Low Pass Filter coefficients
+	 */
 
+	Wo_LP = 2 * 3.141592654 * fo_LP;
+	IWon_LP = 2 / (Wo_LP * Tsample);
+	iir_0_LP = 1 / (1 + IWon_LP);
+	iir_1_LP = iir_0_LP;
+	iir_2_LP = iir_0_LP * (1 - IWon_LP);
+
+	/*
+	 * Acquire acceleration values prior to motion
 	getAccel(handle, ttt);
 
+	x_offset = ttt[0];
+	y_offset = ttt[1];
+	z_offset = ttt[2];
+	*/
 
-	accel_mag = 0;
+
+	sprintf(msg, "\r\nMotion Complete");
+	CDC_Fill_Buffer((uint8_t*)msg, strlen(msg));
+	int endIndex = arrIndex;
 	for (axis_index = 0; axis_index < 3; axis_index++) {
-		accel_mag = accel_mag + pow((ttt[axis_index] - ttt_initial[axis_index]), 2);
+		ttt_prev_LP[axis_index] = 0;
+		ttt_filter_LP[axis_index] = 0;
+		ttt_filter_prev_LP[axis_index] = 0;
+		ttt_prev_HP[axis_index] = 0;
+		ttt_filter_HP[axis_index] = 0;
+		ttt_filter_prev_HP[axis_index] = 0;
+		disp[axis_index] = 0;
+		disp_prev[axis_index] = 0;
 	}
 
-	accel_mag = sqrt(accel_mag);
-	*ttt_1 = ttt[0] - ttt_initial[0];
-	*ttt_2 = ttt[1] - ttt_initial[1];
-	*ttt_3 = ttt[2] - ttt_initial[2];
-	*ttt_mag_scale = (int)(accel_mag);
+	disp_mag = 0;
 
-	BSP_LED_Off(LED1);
-	HAL_Delay(1000);
+	/*
+	 * Set displacement values to zero
+	 */
+
+
+	 /*
+	  * Motion detection loop with High Pass and Low Pass Filters applied
+	  * Note that loop cycle time is DATA_PERIOD_MS matching the SensorTile
+	  * sensor sampling period
+	  */
+
+	sprintf(msg, "\r\nBegin motion when LED On and shake at final position");
+	CDC_Fill_Buffer((uint8_t*)msg, strlen(msg));
+	BSP_LED_On(LED1);
+	int startIndex = arrIndex;
+
+	HAL_Delay(4000);
+
+	for (int i = startIndex; i < endIndex - 1; i++) {
+		if (values[i].yRotation > 4000 ||
+			values[i].yRotation < -4000) {
+			endIndex = i - 2; //TODO change this
+			break;
+		}
+
+		ttt[0] = values[i].xAccel;
+		ttt[1] = values[i].yAccel;
+		ttt[2] = 0;
+
+		/*
+		 * Multiply acceleration signals by FIXED_POINT_GAIN to enable accurate computation
+		 * of Low and High Pass filters
+		 */
+		for (axis_index = 0; axis_index < 3; axis_index++) {
+			ttt[axis_index] = ttt[axis_index]
+				* FIXED_POINT_GAIN_SCALE;
+		}
+
+		for (axis_index = 0; axis_index < 3; axis_index++) {
+			ttt_filter_LP[axis_index] = iir_0_LP * ttt[axis_index]
+				+ iir_1_LP * ttt_prev_LP[axis_index]
+				- iir_2_LP * ttt_filter_prev_LP[axis_index];
+			if (sample_index == 0) {
+				ttt_filter_LP[axis_index] = 0;
+			}
+			ttt_filter_prev_LP[axis_index] =
+				ttt_filter_LP[axis_index];
+			ttt_prev_LP[axis_index] = ttt[axis_index];
+
+			ttt_HP[axis_index] = ttt_filter_LP[axis_index];
+			ttt_filter_HP[axis_index] = iir_0_HP
+				* ttt_HP[axis_index]
+				+ iir_1_HP * ttt_prev_HP[axis_index]
+				- iir_2_HP * ttt_filter_prev_HP[axis_index];
+			ttt_filter_prev_HP[axis_index] =
+				ttt_filter_HP[axis_index];
+			ttt_prev_HP[axis_index] = ttt_HP[axis_index];
+		}
+
+		/*
+		 * Compute displacements
+		 */
+
+		for (axis_index = 0; axis_index < 3; axis_index++) {
+			disp[axis_index] = disp[axis_index] + (ttt_filter_prev_HP[axis_index] + ttt_filter_HP[axis_index]) * (Tsample / 2);
+			disp[axis_index] = disp[axis_index] + (disp_prev[axis_index] + disp[axis_index]) * (Tsample / 2);
+			disp_prev[axis_index] = disp[axis_index];
+		}
+
+
+		/*
+		 * Set Z-displacement to zero
+		 */
+
+		disp[2] = 0;
+
+		/*
+		 * Scale displacements by FIXED_POINT_GAIN
+		 *
+		 * Compute magnitude of displacement
+		 *
+		 */
+		for (axis_index = 0; axis_index < 3; axis_index++) {
+			disp_mag = disp_mag + pow((disp[axis_index] / FIXED_POINT_GAIN_SCALE), 2);
+		}
+
+		disp_mag = sqrt(disp_mag);
+	}
+
+	int xDisp = abs(disp[0] / FIXED_POINT_GAIN_SCALE);
+	int yDisp = abs(disp[1] / FIXED_POINT_GAIN_SCALE);
+	*ttt_3 = (xDisp < yDisp) ? xDisp : -yDisp;
+	*ttt_mag_scale = *ttt_3;
 	return;
 }
 
@@ -628,50 +749,78 @@ void printOutput_ANN(ANN* net, int input_state, int* error) {
 	}
 
 }
+
 void getDataValues(void* handle, int* ttt_1, int* ttt_2,
 	int* ttt_3, int* ttt_mag_scale) {
 	char  msg[1024];
-	//TODO could cause issues in x and y accelerations
-	sprintf(msg, "\r\nBegin motion when LED On and shake at final position");
+
+	sprintf(msg, "\r\nDo motion three times and shake at end of each");
 	CDC_Fill_Buffer((uint8_t*)msg, strlen(msg));
 	BSP_LED_On(LED1);
-	int startIndex = arrIndex;
-
-	HAL_Delay(4000);
+	//Reset array index before each motion
+	arrIndex = 0;
+	HAL_Delay(10000);
 
 	sprintf(msg, "\r\nMotion Complete");
 	CDC_Fill_Buffer((uint8_t*)msg, strlen(msg));
-	int endIndex = arrIndex;
-	float xDisp = 0;
-	float yDisp = 0;
-	float xVel = 0;
-	float yVel = 0;
-	for (int i = startIndex; i < endIndex - 1; i++) {
-		if (values[i].yRotation > 4000 ||
-			values[i].yRotation < -4000) {
-			endIndex = i - 2; //TODO change this
-			break;
+	float xDisp[3] = { 0, 0, 0 };
+	float yDisp[3] = { 0, 0, 0 };
+	float xVel[3] = { 0, 0, 0 };
+	float yVel[3] = { 0, 0, 0 };
+	float xAccel[3] = { 0, 0, 0 };
+	float yAccel[3] = { 0, 0, 0 };
+	int currentMotionIndex = 0, lastMotionIndex = 0;
+	int count = 0;
+	while (count < 3) {
+		for (int i = lastMotionIndex; i < 995; i++) {
+			if (i > 2 && i - lastMotionIndex < 10 && (values[i].yRotation > 1000 ||
+				values[i].yRotation < -1000 || values[i - 1].yRotation > 1000 ||
+				values[i - 1].yRotation < -1000 || values[i - 2].yRotation > 1000 ||
+				values[i - 2].yRotation < -1000)) {
+				currentMotionIndex++; //Bc current motion index will be eventually assigned to lastMotionIndex
+				continue;
+			}
+			if (values[i].yRotation > 2500 || values[i].yRotation < -2500) {
+				lastMotionIndex = currentMotionIndex;
+				currentMotionIndex = i;
+				break;
+			}
 		}
-		xVel += 0.5 * (values[i].xAccel + values[i + 1].xAccel) * 0.05;
-		yVel += 0.5 * (values[i].yAccel + values[i + 1].yAccel) * 0.05;
-		xDisp += 0.05 * xVel;
-		yDisp += 0.05 * yVel;
-	}
+		for (int i = lastMotionIndex; i < (currentMotionIndex + lastMotionIndex) / 2; i++) {
+			int xVelLast = xVel[count];
+			int yVelLast = yVel[count];
+			xVel[count] += 0.5 * (values[i].xAccel + values[i + 1].xAccel) * 0.05;
+			yVel[count] += 0.5 * (values[i].yAccel + values[i + 1].yAccel) * 0.05;
+			xDisp[count] += 0.05 * (xVel[count] + xVelLast) * 0.5;
+			yDisp[count] += 0.05 * (yVel[count] + yVelLast) * 0.5;
+		}
 
-	xDisp = fabs(xDisp);
-	yDisp = fabs(yDisp);
+		xDisp[count] = fabs(xDisp[count]);
+		yDisp[count] = fabs(yDisp[count]);
+		//TODO potentially eliminate the last few accels due to shake
+		xAccel[count] = values[(currentMotionIndex + lastMotionIndex) / 2].xAccel - values[lastMotionIndex + 2].xAccel;
+		yAccel[count] = values[(currentMotionIndex + lastMotionIndex) / 2].yAccel - values[lastMotionIndex + 2].yAccel;
+		lastMotionIndex = currentMotionIndex;
+		count++;
+	}
+	for (int i = 0; i < 3; i++) {
+		int a = xAccel[i];
+		int b = yAccel[i];
+		int c = xDisp[i];
+		int d = yDisp[i];
+		sprintf(msg, "\r\n%i %i %i %i", a, b, c, d);
+		CDC_Fill_Buffer((uint8_t*)msg, strlen(msg));
+	}
 	//Let x displacement be positive and y displacement be negative
 	//Assign ttt_3 to the smaller of the two to avoid gravitational effects
 	//TODO Magnify displacement values by 5 if this does work
-	*ttt_3 = (xDisp < yDisp) ? (int)(xDisp) : (int)(-yDisp);
-	//Contrast between little displacement and lot of displacement
-	/*
-	if (abs(*ttt_3) < 300) {
-		*ttt_3 = 0;
-	}
-	*/
-	*ttt_1 = (int)(values[endIndex].xAccel - values[startIndex].xAccel);
-	*ttt_2 = (int)(values[endIndex].yAccel - values[startIndex].yAccel);
+	int xDispAvgScaled = (int)(fabs((xDisp[0] + xDisp[1] + xDisp[2]) * 0.66666));
+	int yDispAvgScaled = (int)(fabs((yDisp[0] + yDisp[1] + yDisp[2]) * 0.66666));
+	int xAccelAvg = (int)(xAccel[0] + xAccel[1] + xAccel[2]) * 0.33333;
+	int yAccelAvg = (int)(yAccel[0] + yAccel[1] + yAccel[2]) * 0.33333;
+	*ttt_3 = (xDispAvgScaled < yDispAvgScaled) ? xDispAvgScaled : -yDispAvgScaled;
+	*ttt_1 = xAccelAvg;
+	*ttt_2 = yAccelAvg;
 	*ttt_mag_scale = (int)(sqrt(pow(*ttt_1, 2) + pow(*ttt_2, 2) + pow(*ttt_3, 2)));
 	BSP_LED_Off(LED1);
 	HAL_Delay(1000);//TODO change this dont forget pls
@@ -729,7 +878,7 @@ void TrainOrientation(void* handle, void* handle_g, ANN* net) {
 				switch (i) {
 				case 0:
 
-					sprintf(msg1, "\r\nMove to Orientation 1 on LED On");
+					sprintf(msg1, "\r\nStep on LED On");
 					CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
 
 					getDataValues(handle, &ttt_1, &ttt_2, &ttt_3, &ttt_mag_scale);
@@ -738,7 +887,7 @@ void TrainOrientation(void* handle, void* handle_g, ANN* net) {
 
 				case 1:
 
-					sprintf(msg1, "\r\nMove to Orientation 2 on LED On");
+					sprintf(msg1, "\r\nRun on LED On");
 					CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
 
 					getDataValues(handle, &ttt_1, &ttt_2, &ttt_3, &ttt_mag_scale);
@@ -746,28 +895,28 @@ void TrainOrientation(void* handle, void* handle_g, ANN* net) {
 					break;
 
 				case 2:
-					sprintf(msg1, "\r\nMove to Orientation 3 on LED On");
+					sprintf(msg1, "\r\nStretch on LED on");
 					CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
 
 					getDataValues(handle, &ttt_1, &ttt_2, &ttt_3, &ttt_mag_scale);
 					break;
 
 				case 3:
-					sprintf(msg1, "\r\nMove to Orientation 4 on LED On");
+					sprintf(msg1, "\r\nPunch on LED On");
 					CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
 
 					getDataValues(handle, &ttt_1, &ttt_2, &ttt_3, &ttt_mag_scale);
 					break;
 
 				case 4:
-					sprintf(msg1, "\r\nMove to Orientation 5 on LED On");
+					sprintf(msg1, "\r\nSquat on LED On");
 					CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
 
 					getDataValues(handle, &ttt_1, &ttt_2, &ttt_3, &ttt_mag_scale);
 					break;
 
 				case 5:
-					sprintf(msg1, "\r\nMove to Orientation 6 on LED On");
+					sprintf(msg1, "\r\nJumping jack on LED On");
 					CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
 
 					getDataValues(handle, &ttt_1, &ttt_2, &ttt_3, &ttt_mag_scale);
@@ -947,7 +1096,14 @@ int Accel_Gyro_Sensor_Handler(void* handle, void* handle_g, ANN* net, int prev_l
 		arrIndex = 0; //Overwrites data in array to avoid using old values
 		sprintf(msg1, "\n\rBegin string of Motions!!!");
 		CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-		while (k < NUMBER_TEST_CYCLES) {
+		/*
+		for (int i = 0; i < 999; i++) {
+			sprintf(msg1, "\n\r %i %i %i", values[i].xAccel, values[i].yAccel, values[i].yRotation);
+			CDC_Fill_Buffer((uint8_t *) msg1, strlen(msg1));
+			HAL_Delay(100);
+		}
+		*/
+		while (k < 20) {
 
 			BSP_LED_Off(LED1);
 
@@ -972,9 +1128,12 @@ int Accel_Gyro_Sensor_Handler(void* handle, void* handle_g, ANN* net, int prev_l
 			uint8_t isTransition = 0;
 			uint16_t newCurrentIndex = 0;
 			for (int i = lastMotionIndex; i < 993; i++) {
-				//Prevents shaking x and y accels from being used
-				if (i - lastMotionIndex < 10 && (values[i].yRotation > 1000 ||
-					values[i].yRotation < -1000)) {
+				//Prevents shaking x and y accels from being used, requires past 3 yRotations
+				//to be abs value less than 1000
+				if (i > 2 && i - lastMotionIndex < 10 && (values[i].yRotation > 1000 ||
+					values[i].yRotation < -1000 || values[i - 1].yRotation > 1000 ||
+					values[i - 1].yRotation < -1000 || values[i - 2].yRotation > 1000 ||
+					values[i - 2].yRotation < -1000)) {
 					currentMotionIndex++; //Bc current motion index will be eventually assigned to lastMotionIndex
 					continue;
 				}
@@ -1022,14 +1181,18 @@ int Accel_Gyro_Sensor_Handler(void* handle, void* handle_g, ANN* net, int prev_l
 			float yDisplacement = 0;
 			float xVel = 0;
 			float yVel = 0;
-			for (int i = lastMotionIndex; i < currentMotionIndex - 3; i++) {
+			for (int i = lastMotionIndex; i < (lastMotionIndex + currentMotionIndex) / 2; i++) {
+				int xVelPast = xVel;
+				int yVelPast = yVel;
 				xVel += 0.5 * (values[i].xAccel + values[i + 1].xAccel) * 0.05;
 				yVel += 0.5 * (values[i].yAccel + values[i + 1].yAccel) * 0.05;
-				xDisplacement += 0.05 * xVel;
-				yDisplacement += 0.05 * yVel;
+				xDisplacement += 0.05 * (xVel + xVelPast) * 0.5;
+				yDisplacement += 0.05 * (yVel + yVelPast) * 0.5;
 			}
+			xDisplacement = fabs(xDisplacement);
+			yDisplacement = fabs(yDisplacement);
 			ttt_3 = (xDisplacement < yDisplacement) ?
-				(int)(xDisplacement) : (int)(-yDisplacement);
+				(int)(2 * xDisplacement) : (int)(-yDisplacement * 2);
 			ttt_mag_scale = (int)(sqrt(pow(ttt_1, 2) + pow(ttt_2, 2) + pow(ttt_3, 2)));
 
 
@@ -1074,28 +1237,28 @@ int Accel_Gyro_Sensor_Handler(void* handle, void* handle_g, ANN* net, int prev_l
 
 			switch (loc) {
 			case 0:
-				sprintf(msg1, "\n\rNeural Network Classification - Motion 1");
+				sprintf(msg1, "\n\rNeural Network Classification - Walk");
 				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
 				break;
 			case 1:
-				sprintf(msg1, "\n\rNeural Network Classification - Motion 2");
+				sprintf(msg1, "\n\rNeural Network Classification - Run");
 				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
 				break;
 			case 2:
-				sprintf(msg1, "\n\rNeural Network Classification - Motion 3");
+				sprintf(msg1, "\n\rNeural Network Classification - Stretch");
 				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
 				break;
 			case 3:
-				sprintf(msg1, "\n\rNeural Network Classification - Motion 4");
+				sprintf(msg1, "\n\rNeural Network Classification - Punch");
 				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
 				break;
 			case 4:
-				sprintf(msg1, "\n\rNeural Network Classification - Motion 5");
+				sprintf(msg1, "\n\rNeural Network Classification - Squat");
 				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
 				break;
 			case 5:
 				sprintf(msg1,
-					"\n\rNeural Network Classification - Orientation 6");
+					"\n\rNeural Network Classification - Jumping Jack");
 				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
 				break;
 			case -1:
