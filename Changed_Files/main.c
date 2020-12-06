@@ -1,4 +1,3 @@
-
 /**
  * MODIFIED BY CHARLES ZALOOM - 8/3/18
  * IMPLEMENTATION OF EMBEDDEDML IN LEARNING DEVICE ORIENTATION
@@ -778,16 +777,7 @@ void getDataValues(void* handle, int* ttt_1, int* ttt_2,
     CDC_Fill_Buffer((uint8_t*)msg, strlen(msg));
     float xAngle[3] = {0,0,0};
     float zAngle[3] = {0,0,0};
-    float xRotationRate[3] = {0,0,0};
-    float zRotationRate[3] = {0,0,0};
-
-
-//    float xDisp[3] = { 0, 0, 0 };
-//    float yDisp[3] = { 0, 0, 0 };
-//    float xVel[3] = { 0, 0, 0 };
-//    float yVel[3] = { 0, 0, 0 };
-//    float xAccel[3] = { 0, 0, 0 };
-//    float yAccel[3] = { 0, 0, 0 };
+    
 
 
     int currentMotionIndex = 0, lastMotionIndex = 0;
@@ -807,8 +797,6 @@ void getDataValues(void* handle, int* ttt_1, int* ttt_2,
                 break;
             }
         }
-        //Save first motion index to keep track of time
-        int firstMotionIndex = currentMotionIndex;
         for (int i = lastMotionIndex; i < (currentMotionIndex + lastMotionIndex) / 2; i++) {
             int xAngleLast = xAngle[count];
             int zAngleLast = zAngle[count];
@@ -819,38 +807,34 @@ void getDataValues(void* handle, int* ttt_1, int* ttt_2,
 
         }
 
-        xAngle[count] = fabs(xAngle[count]);
-        zAngle[count] = fabs(zAngle[count]);
 
-        //TODO potentially eliminate the last few rotationRates due to shake
-        xRotationRate[count] = values[(currentMotionIndex + lastMotionIndex) / 2].xRotation - values[lastMotionIndex + 2].xRotation;
-        zRotationRate[count] = values[(currentMotionIndex + lastMotionIndex) / 2].zRotation - values[lastMotionIndex + 2].zRotation;
+       
         lastMotionIndex = currentMotionIndex;
         count++;
     }
     for (int i = 0; i < 3; i++) {
-        int a = xRotationRate[i];
-        int b = zRotationRate[i];
-        int c = xAngle[i];
-        int d = zAngle[i];
-        sprintf(msg, "\r\n%i %i %i %i", a, b, c, d);
+        int a = xAngle[i];
+        int b = zAngle[i];
+        sprintf(msg, "\r\n%i %i ", a, b);
         CDC_Fill_Buffer((uint8_t*)msg, strlen(msg));
     }
-    //Let x rotation rate be positive and y rotation rate be negative
+
 
     //Assign ttt_3 to the time between start and end of motion in milliseconds
     //TODO Should we still magnify rotation rate values???
-    //TODO DELETE THIS COMMENT @Jason, why do we multiply the two avgs by different constants?
-    int xAngleAvgScaled = (int)(fabs((xAngle[0] + xAngle[1] + xAngle[2]) * 0.66666));
-    int zAngleAvgScaled = (int)(fabs((zAngle[0] + zAngle[1] + zAngle[2]) * 0.66666));
-    int xRotationRateAvg = (int)(xRotationRate[0] + xRotationRate[1] + xRotationRate[2]) * 0.33333;
-    int zRotationRateAvg = (int)(zRotationRate[0] + zRotationRate[1] + zRotationRate[2]) * 0.33333;
+    int xAngleAvgScaled = (int)((xAngle[0] + xAngle[1] + xAngle[2]) * 0.33333);
+    int zAngleAvgScaled = (int)((zAngle[0] + zAngle[1] + zAngle[2]) * 0.33333);
 
-    //Why is this scaled again?
-    *ttt_1 = xAngleAvgScaled;
-    *ttt_2 = zAngleAvgScaled;
+    //Convert from millidegrees to degrees
+    *ttt_1 = xAngleAvgScaled/1000;
+    *ttt_2 = zAngleAvgScaled/1000;
     //Set ttt_3 equal to time between start and end of motion in milliseconds
-    *ttt_3 = lastMotionIndex-firstMotionIndex * 50;
+    if (currentMotionIndex - lastMotionIndex >= 30) { //1.5 seconds
+                    *ttt_3 = (*ttt_1 + *ttt_2) / 2;
+                }
+    else {
+            *ttt_3 = 0;
+        }
     *ttt_mag_scale = (int)(sqrt(pow(*ttt_1, 2) + pow(*ttt_2, 2) + pow(*ttt_3, 2)));
     BSP_LED_Off(LED1);
     //What are we changing this to again
@@ -1085,276 +1069,211 @@ void TrainOrientation(void* handle, void* handle_g, ANN* net) {
     return;
 }
 
+
 int Accel_Gyro_Sensor_Handler(void* handle, void* handle_g, ANN* net, int prev_loc) {
-    uint8_t id, id_g;
-    SensorAxes_t acceleration;
-    SensorAxes_t angular_velocity;
-    uint8_t status;
-    uint8_t status_g;
-    float xyz[3];
-    float XYZ[3];
-    float point;
-    int i, j, k, loc;
-    int ttt_1, ttt_2, ttt_3, ttt_mag_scale;
-    char msg1[512];
+	uint8_t id, id_g;
+	SensorAxes_t acceleration;
+	SensorAxes_t angular_velocity;
+	uint8_t status;
+	uint8_t status_g;
+	float xyz[3];
+	float XYZ[3];
+	float point;
+	int i, j, k, loc;
+	int ttt_1, ttt_2, ttt_3, ttt_mag_scale;
+	char msg1[512];
 
 
-    BSP_ACCELERO_Get_Instance(handle, &id);
-    BSP_ACCELERO_IsInitialized(handle, &status);
-    BSP_GYRO_Get_Instance(handle_g, &id_g);
-    BSP_GYRO_IsInitialized(handle_g, &status_g);
+	BSP_ACCELERO_Get_Instance(handle, &id);
+	BSP_ACCELERO_IsInitialized(handle, &status);
+	BSP_GYRO_Get_Instance(handle_g, &id_g);
+	BSP_GYRO_IsInitialized(handle_g, &status_g);
 
-    if (status == 1 && status_g == 1) {
-        if (BSP_GYRO_Get_Axes(handle_g, &angular_velocity) == COMPONENT_ERROR) {
-            angular_velocity.AXIS_X = 0;
-            angular_velocity.AXIS_Y = 0;
-            angular_velocity.AXIS_Z = 0;
-        }
-        if (BSP_ACCELERO_Get_Axes(handle, &acceleration) == COMPONENT_ERROR) {
-            acceleration.AXIS_X = 0;
-            acceleration.AXIS_Y = 0;
-            acceleration.AXIS_Z = 0;
-        }
+	if (status == 1 && status_g == 1) {
+		if (BSP_GYRO_Get_Axes(handle_g, &angular_velocity) == COMPONENT_ERROR) {
+			angular_velocity.AXIS_X = 0;
+			angular_velocity.AXIS_Y = 0;
+			angular_velocity.AXIS_Z = 0;
+		}
+		if (BSP_ACCELERO_Get_Axes(handle, &acceleration) == COMPONENT_ERROR) {
+			acceleration.AXIS_X = 0;
+			acceleration.AXIS_Y = 0;
+			acceleration.AXIS_Z = 0;
+		}
 
-        /*
-         * Perform limited number of NN execution and prediction cycles.
-         * Upon return, training will be repeated
-         */
+		/*
+		 * Perform limited number of NN execution and prediction cycles.
+		 * Upon return, training will be repeated
+		 */
 
-        k = 0;
-        int lastMotionIndex = 0;
-        int currentMotionIndex = 0;
-        arrIndex = 0; //Overwrites data in array to avoid using old values
-        sprintf(msg1, "\n\rBegin string of Motions!!!");
-        CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-        /*
-        for (int i = 0; i < 999; i++) {
-            sprintf(msg1, "\n\r %i %i %i", values[i].xAccel, values[i].yAccel, values[i].yRotation);
-            CDC_Fill_Buffer((uint8_t *) msg1, strlen(msg1));
-            HAL_Delay(100);
-        }
-        */
-        while (k < 20) {
+		k = 0;
+		int lastMotionIndex = 0;
+		int currentMotionIndex = 0;
+		arrIndex = 0; //Overwrites data in array to avoid using old values
+		sprintf(msg1, "\n\rBegin string of Motions!!!");
+		CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+		/*
+		for (int i = 0; i < 999; i++) {
+			sprintf(msg1, "\n\r %i %i %i", values[i].xAccel, values[i].yAccel, values[i].yRotation);
+			CDC_Fill_Buffer((uint8_t *) msg1, strlen(msg1));
+			HAL_Delay(100);
+		}
+		return 0;
+		*/
+		while (1) {
 
-            BSP_LED_Off(LED1);
+			BSP_LED_Off(LED1);
 
-            /*
-
-            sprintf(msg1, "\n\rMove to Start Position - Wait for LED On");
-            CDC_Fill_Buffer((uint8_t *) msg1, strlen(msg1));
-            HAL_Delay(START_POSITION_INTERVAL);
-
-            Feature_Extraction_State_0(handle, &ttt_1, &ttt_2, &ttt_3,
-                    &ttt_mag_scale);
-
-            Feature_Extraction_State_1(handle_g, &ttt_1, &ttt_2, &ttt_3,
-                    &ttt_mag_scale);
-            */
-
-            //Ensures that method lags behind updating array by at least 2 seconds
-            while (arrIndex - currentMotionIndex < 40) {
-                HAL_Delay(1000);
-            }
-            //Finds start and end of motion
-            uint8_t isTransition = 0;
-            uint16_t newCurrentIndex = 0;
-            for (int i = lastMotionIndex; i < 993; i++) {
-                //Prevents shaking x and y accels from being used, requires past 3 yRotations
-                //to be abs value less than 1000
-                if (i > 2 && i - lastMotionIndex < 10 && (values[i].yRotation > 1000 ||
-                    values[i].yRotation < -1000 || values[i - 1].yRotation > 1000 ||
-                    values[i - 1].yRotation < -1000 || values[i - 2].yRotation > 1000 ||
-                    values[i - 2].yRotation < -1000)) {
-                    currentMotionIndex++; //Bc current motion index will be eventually assigned to lastMotionIndex
-                    continue;
-                }
-                //Prevents loop from accessing invalid elements by being too fast
-                while (arrIndex - i < 10) {
-                    HAL_Delay(500);
-                }
-                /*
-                //TODO Arbitrary Values that must be changed
-                //Massive change in yRotation signaling lateral transition
-                //between movements
-                if (values[i].yRotation > 8000 || values[i].yRotation < -8000) {
-                    isTransition = 1;
-                    lastMotionIndex = currentMotionIndex;
-                    currentMotionIndex = i;
-                    i += 3;
-                }
-                //The sensortile is transitioning
-                if (isTransition == 1 && (values[i].yRotation < 100
-                        && values[i].yRotation > -100)) {
-                    isTransition = 2;
-                }
-                //Rotate again to signal start of new action
-                if (isTransition == 2 && (values[i].yRotation > 8000 ||
-                        values[i].yRotation < -8000)) {
-                    isTransition = 0;
-                    newCurrentIndex = i;
-                }
-                */
-                //End of motion
-                //Mark the startingMotionindex to calculate time later
-                int firstMotionIndex= currentMotionIndex;
-                if (isTransition == 0 && (values[i].yRotation > 2500 ||
-                    values[i].yRotation < -2500)) {
-                    lastMotionIndex = currentMotionIndex;
-                    currentMotionIndex = i;
-                    sprintf(msg1, "\r\n %i %i %i", i, lastMotionIndex, currentMotionIndex);
-                    CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-                    break;
-                }
-            }
-
-            //Compute difference in angular velocity between start of motion, midpoint max of motion
-            //for the x and z axes
-            ttt_1 = (int)(values[(currentMotionIndex + lastMotionIndex) / 2].xRotation
-                            - values[lastMotionIndex + 2].xRotation);
-            ttt_2 = (int)(values[(currentMotionIndex + lastMotionIndex) / 2].zRotation
-                            - values[lastMotionIndex + 2].zRotation);
-
-//            //Computes difference in accel between start of motion and midpoint max of motion
-//            ttt_1 = (int)(values[(currentMotionIndex + lastMotionIndex) / 2].xAccel
-//                - values[lastMotionIndex + 2].xAccel);
-//            ttt_2 = (int)(values[(currentMotionIndex + lastMotionIndex) / 2].yAccel
-//                - values[lastMotionIndex + 2].yAccel);
-            float xAngle =0;
-            float zAngle =0;
-
-//            float xDisplacement = 0;
-//            float yDisplacement = 0;
-//            float xVel = 0;
-//            float yVel = 0;
-            for (int i = lastMotionIndex; i < (lastMotionIndex + currentMotionIndex) / 2; i++) {
-                int xAnglePast = xAngle;
-                int yAnglePast = zAngle;
-                xAngle += 0.5 * (values[i].xRotation + values[i + 1].xRotation) * 0.05;
-                zAngle += 0.5 * (values[i].zRotation + values[i + 1].zRotation) * 0.05;
-
-            }
-            //Convert from milliDegrees to degrees
-            xAngle = xAngle/1000;
-            yAngle = yAngle/1000;
+			//Ensures that method lags behind updating array by at least 2 seconds
+			while (arrIndex - currentMotionIndex < 40) {
+				HAL_Delay(1000);
+			}
+			//Finds start and end of motion
+			uint8_t isTransition = 0;
+			uint16_t newCurrentIndex = 0;
+			for (int i = lastMotionIndex; i < 993; i++) {
+				if (i == 992) {
+					return 0;
+				}
+				//Prevents shaking x and y accels from being used, requires past 3 yRotations
+				//to be abs value less than 1000
+				if (i > 2 && i - lastMotionIndex < 10 && (values[i].yRotation > 1000 ||
+					values[i].yRotation < -1000 || values[i - 1].yRotation > 1000 ||
+					values[i - 1].yRotation < -1000 || values[i - 2].yRotation > 1000 ||
+					values[i - 2].yRotation < -1000)) {
+					currentMotionIndex++; //Bc current motion index will be eventually assigned to lastMotionIndex
+					continue;
+				}
+				//Prevents loop from accessing invalid elements by being too fast
+				while (arrIndex - i < 10) {
+					HAL_Delay(500);
+				}
+				/*
+				//TODO Arbitrary Values that must be changed
+				//Massive change in yRotation signaling lateral transition
+				//between movements
+				if (values[i].yRotation > 8000 || values[i].yRotation < -8000) {
+					isTransition = 1;
+					lastMotionIndex = currentMotionIndex;
+					currentMotionIndex = i;
+					i += 3;
+				}
+				//The sensortile is transitioning
+				if (isTransition == 1 && (values[i].yRotation < 100
+						&& values[i].yRotation > -100)) {
+					isTransition = 2;
+				}
+				//Rotate again to signal start of new action
+				if (isTransition == 2 && (values[i].yRotation > 8000 ||
+						values[i].yRotation < -8000)) {
+					isTransition = 0;
+					newCurrentIndex = i;
+				}
+				*/
+				if (isTransition == 0 && (values[i].yRotation > 2500 ||
+					values[i].yRotation < -2500)) {
+					lastMotionIndex = currentMotionIndex;
+					currentMotionIndex = i;
+					sprintf(msg1, "\r\n %i %i %i", arrIndex, lastMotionIndex, currentMotionIndex);
+					CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+					break;
+				}
+			}
+			float xAngle = 0;
+			float zAngle = 0;
+			for (int i = lastMotionIndex + 1; i < (lastMotionIndex + currentMotionIndex) / 2; i++) {
+				xAngle += 0.05 * (values[i].xRotation + values[i - 1].xRotation) * 0.5;
+				zAngle += 0.05 * (values[i].zRotation + values[i - 1].zRotation) * 0.5;
+			}
+			ttt_1 = (int)(xAngle / 1000);
+			ttt_2 = (int)(zAngle / 1000);
+			//TODO maybe threshold event time and assign to avg to ttt_1 and ttt_2
+			ttt_3 = (currentMotionIndex - lastMotionIndex) * 50;
+			ttt_mag_scale = (int)(sqrt(pow(ttt_1, 2) + pow(ttt_2, 2) + pow(ttt_3, 2)));
 
 
-            //Set ttt_3 equal to the time for motion to take place in milliseconds
-            ttt_3 = lastMotionIndex- firstMotionIndex *50;
+			XYZ[0] = (float)ttt_1;
+			XYZ[1] = (float)ttt_2;
+			XYZ[2] = (float)ttt_3;
 
-//
-//            ttt_3 = (xDisplacement < yDisplacement) ?
-//                (int)(2 * xDisplacement) : (int)(-yDisplacement * 2);
-//            ttt_mag_scale = (int)(sqrt(pow(ttt_1, 2) + pow(ttt_2, 2) + pow(ttt_3, 2)));
+			motion_softmax(net->topology[0], XYZ, xyz);
 
+			sprintf(msg1, "\r\n Softmax Input: \t");
+			CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+			for (j = 0; j < 3; j++) {
+				sprintf(msg1, "%i\t", (int)XYZ[j]);
+				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+			}
+			sprintf(msg1, "\r\n Softmax Output: \t");
+			CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+			for (j = 0; j < 3; j++) {
+				sprintf(msg1, "%i\t", (int)(100 * xyz[j]));
+				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+			}
+			sprintf(msg1, "\r\n");
 
-            XYZ[0] = (float)ttt_1;
-            XYZ[1] = (float)ttt_2;
-            XYZ[2] = (float)ttt_3;
+			run_ann(net, xyz);
 
-            motion_softmax(net->topology[0], XYZ, xyz);
+			point = 0.0;
+			loc = -1;
 
-            sprintf(msg1, "\r\n Softmax Input: \t");
-            CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-            for (j = 0; j < 3; j++) {
-                sprintf(msg1, "%i\t", (int)XYZ[j]);
-                CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-            }
-            sprintf(msg1, "\r\n Softmax Output: \t");
-            CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-            for (j = 0; j < 3; j++) {
-                sprintf(msg1, "%i\t", (int)(100 * xyz[j]));
-                CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-            }
-            sprintf(msg1, "\r\n");
+			for (i = 0; i < net->topology[net->n_layers - 1]; i++) {
+				if (net->output[i] > point && net->output[i] > 0.1) {
+					point = net->output[i];
+					loc = i;
+				}
+			}
 
-            run_ann(net, xyz);
+			if (loc == -1) {
+				LED_Code_Blink(0);
+			}
+			else {
+				LED_Code_Blink(loc + 1);
+			}
 
-            point = 0.0;
-            loc = -1;
-
-            for (i = 0; i < net->topology[net->n_layers - 1]; i++) {
-                if (net->output[i] > point && net->output[i] > 0.1) {
-                    point = net->output[i];
-                    loc = i;
-                }
-            }
-
-            if (loc == -1) {
-                LED_Code_Blink(0);
-            }
-            else {
-                LED_Code_Blink(loc + 1);
-            }
-
-            switch (loc) {
-            case 0:
-                sprintf(msg1, "\n\rNeural Network Classification - Walk");
-                CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-                break;
-            case 1:
-                sprintf(msg1, "\n\rNeural Network Classification - Run");
-                CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-                break;
-            case 2:
-                sprintf(msg1, "\n\rNeural Network Classification - Stretch");
-                CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-                break;
-            case 3:
-                sprintf(msg1, "\n\rNeural Network Classification - Punch");
-                CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-                break;
-            case 4:
-                sprintf(msg1, "\n\rNeural Network Classification - Squat");
-                CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-                break;
-            case 5:
-                sprintf(msg1,
-                    "\n\rNeural Network Classification - Jumping Jack");
-                CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-                break;
-            case -1:
-                sprintf(msg1, "\n\rNeural Network Classification - ERROR");
-                CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-                break;
-            default:
-                sprintf(msg1, "\n\rNeural Network Classification - NULL");
-                CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-                break;
-            }
-            updateMotions(loc);
-            if (isTransition == 2) {
-                currentMotionIndex = newCurrentIndex;
-            }
-            lastMotionIndex = currentMotionIndex; //End of first motion is start of next
-            k = k + 1;
-        }
-    }
-    return prev_loc;
-}
-
-void updateMotions(int classification){
-    switch(classification){
-    case 0:
-        motions.numWalked+=2; // Add 2 since we classify steps by hand going out and back
-        break;
-    case 1:
-        motions.numRan+=2; // Add 2 since we classify steps by hand going out and back
-        break;
-    case 2:
-        motions.numStretch++;
-        break;
-    case 3:
-        motions.numPunch++;
-        break;
-    case 4:
-        motions.numSquat++;
-        break;
-    case 5:
-        motions.numJack++;
-        break;
-    default:
-        break;
-    }
+			switch (loc) {
+			case 0:
+				sprintf(msg1, "\n\rNeural Network Classification - Walk");
+				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+				break;
+			case 1:
+				sprintf(msg1, "\n\rNeural Network Classification - Run");
+				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+				break;
+			case 2:
+				sprintf(msg1, "\n\rNeural Network Classification - Stretch");
+				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+				break;
+			case 3:
+				sprintf(msg1, "\n\rNeural Network Classification - Punch");
+				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+				break;
+			case 4:
+				sprintf(msg1, "\n\rNeural Network Classification - Squat");
+				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+				break;
+			case 5:
+				sprintf(msg1,
+					"\n\rNeural Network Classification - Jumping Jack");
+				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+				break;
+			case -1:
+				sprintf(msg1, "\n\rNeural Network Classification - ERROR");
+				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+				break;
+			default:
+				sprintf(msg1, "\n\rNeural Network Classification - NULL");
+				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+				break;
+			}
+			if (isTransition == 2) {
+				currentMotionIndex = newCurrentIndex;
+			}
+			lastMotionIndex = currentMotionIndex; //End of first motion is start of next
+			k = k + 1;
+		}
+	}
+	return prev_loc;
 }
 #define WALK_MET 2
 #define WALK_PER_MIN 90
