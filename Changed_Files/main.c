@@ -814,9 +814,9 @@ void getDataValues(void* handle, int* ttt_1, int* ttt_2,
         count++;
     }
     for (int i = 0; i < 3; i++) {
-        int c = xAngle[i];
-        int d = zAngle[i];
-        sprintf(msg, "\r\n%i %i %i %i", a, b, c, d);
+        int a = xAngle[i];
+        int b = zAngle[i];
+        sprintf(msg, "\r\n%i %i ", a, b);
         CDC_Fill_Buffer((uint8_t*)msg, strlen(msg));
     }
 
@@ -831,12 +831,12 @@ void getDataValues(void* handle, int* ttt_1, int* ttt_2,
     *ttt_2 = zAngleAvgScaled/1000;
     //Set ttt_3 equal to time between start and end of motion in milliseconds
     if (currentMotionIndex - lastMotionIndex >= 30) { //1.5 seconds
-                    *ttt_3 = (ttt_1 + ttt_2) / 2;
+                    *ttt_3 = (*ttt_1 + *ttt_2) / 2;
                 }
     else {
             *ttt_3 = 0;
         }
-    *ttt_mag_scale = (int)(sqrt(pow(*ttt_1, 2) + pow(*ttt_2, 2)));
+    *ttt_mag_scale = (int)(sqrt(pow(*ttt_1, 2) + pow(*ttt_2, 2) + pow(*ttt_3, 2)));
     BSP_LED_Off(LED1);
     //What are we changing this to again
     HAL_Delay(1000);//TODO change this dont forget pls
