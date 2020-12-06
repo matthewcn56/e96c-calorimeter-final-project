@@ -1,3 +1,4 @@
+
 /**
  * MODIFIED BY CHARLES ZALOOM - 8/3/18
  * IMPLEMENTATION OF EMBEDDEDML IN LEARNING DEVICE ORIENTATION
@@ -137,7 +138,7 @@ static void initializeAllSensors(void);
 static volatile uint8_t hasTrained = 0;
 unsigned int training_cycles = TRAINING_CYCLES;
 void getAngularVelocity(void* handle_g, int* xyz) {
-   uint8_t id;
+    uint8_t id;
     SensorAxes_t angular_velocity;
     uint8_t status;
     BSP_GYRO_Get_Instance(handle_g, &id);
@@ -1355,16 +1356,87 @@ void updateMotions(int classification){
         break;
     }
 }
+#define WALK_MET 2
+#define WALK_PER_MIN 90
 
-//void processData(int weight){
-//    double walkedCalories
-//    sprintf(dataOut, "\r\nYou walked %i\tsteps which burned %i calories",
-//            motions.numWalked, )
-////    sprintf(dataOut, "\r\nState %i\tMax %i\tMean %i\t\tZ-score %i\tOutputs",
-////            loc, (int)(100 * point), (int)(100 * mean_output),
-////            (int)(100 * classification_metric));
-////        CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
-//}
+#define RUN_MET 160
+#define RUN_PER_MIN 7
+
+#define STRETCH_MET 1.8
+#define STRETCH_PER_MIN 50
+
+#define PUNCH_MET 3.5
+#define PUNCH_PER_MIN 100
+
+#define SQUAT_MET 3
+#define SQUAT_PER_MIN 30
+
+#define JACK_MET 8
+#define JACK_PER_MIN 60
+
+void processData(int weight){
+
+    double totalCalories=0;
+    double walkCalories;
+    walkCalories = (WALK_MET * 3.5 * weight)/200 * (1/WALK_PER_MIN)* motions.numWalked;
+    totalCalories+=walkCalories;
+
+    double runCalories;
+    runCalories = (RUN_MET * 3.5 * weight)/200 * (1/RUN_PER_MIN)* motions.numRan;
+    totalCalories+= runCalories;
+
+    double stretchCalories;
+    stretchCalories = (STRETCH_MET * 3.5 * weight)/200 * (1/STRETCH_PER_MIN)* motions.numStretch;
+    totalCalories += stretchCalories;
+
+    double punchCalories;
+    punchCalories = (PUNCH_MET * 3.5 * weight)/200 * (1/PUNCH_PER_MIN)* motions.numPunch;
+    totalCalories+= punchCalories;
+
+    double squatCalories;
+    squatCalories = (SQUAT_MET * 3.5 * weight)/200 * (1/SQUAT_PER_MIN)* motions.numSquat;
+    totalCalories+= squatCalories;
+
+    double jackCalories;
+    jackCalories = (JACK_MET * 3.5 * weight)/200 * (1/JACK_PER_MIN)* motions.numJack;
+    totalCalories += jackCalories;
+
+    sprintf(dataOut, "\r\nYou walked %i\tsteps which burned %lf\tcalories",
+            motions.numWalked, walkCalories);
+    CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+
+    sprintf(dataOut, "\r\nYou ran %i\tsteps which burned %lf\tcalories",
+                motions.numRan, runCalories);
+    CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+
+    sprintf(dataOut, "\r\nYou stretched %i\ttimes which burned %lf\tcalories",
+                motions.numStretch, stretchCalories);
+    CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+
+    sprintf(dataOut, "\r\nYou punched %i\ttimes which burned %lf\tcalories",
+                motions.numPunch, punchCalories);
+    CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+
+    sprintf(dataOut, "\r\nYou squatted %i\ttimes which burned %lf\tcalories",
+                    motions.numSquat, squatCalories);
+    CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+
+    sprintf(dataOut, "\r\nYou did %i\tjumping jacks which burned %lf\tcalories",
+                        motions.numJack, jackCalories);
+    CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+
+    sprintf(dataOut, "\r\nIn total, you completed %i\tmotions which burned %lf\tcalories",
+            motions.numPunch, totalCalories);
+    CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+
+
+
+
+//    sprintf(dataOut, "\r\nState %i\tMax %i\tMean %i\t\tZ-score %i\tOutputs",
+//            loc, (int)(100 * point), (int)(100 * mean_output),
+//            (int)(100 * classification_metric));
+//        CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+}
 
 int main(void) {
     uint32_t msTick, msTickPrev = 0;
@@ -1788,5 +1860,3 @@ void assert_failed(uint8_t* file, uint32_t line)
 #endif
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
-
-
