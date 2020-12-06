@@ -1401,31 +1401,31 @@ void processData(int weight){
     jackCalories = (JACK_MET * 3.5 * weight)/200 * (1/JACK_PER_MIN)* motions.numJack;
     totalCalories += jackCalories;
 
-    sprintf(dataOut, "\r\nYou walked %i\tsteps which burned %lf\tcalories",
+    sprintf(dataOut, "\r\nYou walked %i\tsteps which burned %.2f\tcalories",
             motions.numWalked, walkCalories);
     CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
 
-    sprintf(dataOut, "\r\nYou ran %i\tsteps which burned %lf\tcalories",
+    sprintf(dataOut, "\r\nYou ran %i\tsteps which burned %.2f\tcalories",
                 motions.numRan, runCalories);
     CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
 
-    sprintf(dataOut, "\r\nYou stretched %i\ttimes which burned %lf\tcalories",
+    sprintf(dataOut, "\r\nYou stretched %i\ttimes which burned %.2f\tcalories",
                 motions.numStretch, stretchCalories);
     CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
 
-    sprintf(dataOut, "\r\nYou punched %i\ttimes which burned %lf\tcalories",
+    sprintf(dataOut, "\r\nYou punched %i\ttimes which burned %.2f\tcalories",
                 motions.numPunch, punchCalories);
     CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
 
-    sprintf(dataOut, "\r\nYou squatted %i\ttimes which burned %lf\tcalories",
+    sprintf(dataOut, "\r\nYou squatted %i\ttimes which burned %.2f\tcalories",
                     motions.numSquat, squatCalories);
     CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
 
-    sprintf(dataOut, "\r\nYou did %i\tjumping jacks which burned %lf\tcalories",
+    sprintf(dataOut, "\r\nYou did %i\tjumping jacks which burned %.2f\tcalories",
                         motions.numJack, jackCalories);
     CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
 
-    sprintf(dataOut, "\r\nIn total, you completed %i\tmotions which burned %lf\tcalories",
+    sprintf(dataOut, "\r\nIn total, you completed %i\tmotions which burned %.2f\tcalories",
             motions.numPunch, totalCalories);
     CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
 
@@ -1588,9 +1588,9 @@ int main(void) {
                 loc = Accel_Gyro_Sensor_Handler(LSM6DSM_X_0_handle, LSM6DSM_G_0_handle,
                     &net, loc);
                 //After returning from Accel_Gyro_Sensor_Handler, process data
-                //TODO Finish processData function
-                //processData(userWeight);
-
+                processData(userWeight);
+                //Will no longer initiate retraining, simply ends.
+                //TODO implement timer inside Accel_Gyro to exit once we reach a time threshold
 //                /*
 //                 * Upon return from Accel_Sensor_Handler, initiate retraining.
 //                 */
