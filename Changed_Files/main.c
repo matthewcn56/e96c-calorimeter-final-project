@@ -264,7 +264,7 @@ void updateData(void) {
 	if (dataACQ > 50) {
 		dataACQ = 0;
 	}
-	if (doubleTapOccured == 1 && dataACQ++ == 50) {
+	if (doubleTapOccured == 1 && dataACQ++ == 50 && arrIndex < 999) {
 		struct DataPoint point;
 		int xyz[3];
 		if (LSM6DSM_X_0_handle != NULL) {
@@ -277,9 +277,6 @@ void updateData(void) {
 		}
 		point.yRotation = xyz[1] / 100;
 		values[arrIndex++] = point;
-		if (arrIndex == 999) {
-			arrIndex = 0;
-		}
 	}
 }
 
@@ -1102,23 +1099,11 @@ int Accel_Gyro_Sensor_Handler(void* handle, void* handle_g, ANN* net, int prev_l
 			CDC_Fill_Buffer((uint8_t *) msg1, strlen(msg1));
 			HAL_Delay(100);
 		}
+		return 0;
 		*/
-		while (k < 20) {
+		while (1) {
 
 			BSP_LED_Off(LED1);
-
-			/*
-
-			sprintf(msg1, "\n\rMove to Start Position - Wait for LED On");
-			CDC_Fill_Buffer((uint8_t *) msg1, strlen(msg1));
-			HAL_Delay(START_POSITION_INTERVAL);
-
-			Feature_Extraction_State_0(handle, &ttt_1, &ttt_2, &ttt_3,
-					&ttt_mag_scale);
-
-			Feature_Extraction_State_1(handle_g, &ttt_1, &ttt_2, &ttt_3,
-					&ttt_mag_scale);
-			*/
 
 			//Ensures that method lags behind updating array by at least 2 seconds
 			while (arrIndex - currentMotionIndex < 40) {
@@ -1128,6 +1113,9 @@ int Accel_Gyro_Sensor_Handler(void* handle, void* handle_g, ANN* net, int prev_l
 			uint8_t isTransition = 0;
 			uint16_t newCurrentIndex = 0;
 			for (int i = lastMotionIndex; i < 993; i++) {
+				if (i == 992) {
+					return 0;
+				}
 				//Prevents shaking x and y accels from being used, requires past 3 yRotations
 				//to be abs value less than 1000
 				if (i > 2 && i - lastMotionIndex < 10 && (values[i].yRotation > 1000 ||
@@ -1167,32 +1155,21 @@ int Accel_Gyro_Sensor_Handler(void* handle, void* handle_g, ANN* net, int prev_l
 					values[i].yRotation < -2500)) {
 					lastMotionIndex = currentMotionIndex;
 					currentMotionIndex = i;
-					sprintf(msg1, "\r\n %i %i %i", i, lastMotionIndex, currentMotionIndex);
+					sprintf(msg1, "\r\n %i %i %i", arrIndex, lastMotionIndex, currentMotionIndex);
 					CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
 					break;
 				}
 			}
-			//Computes difference in accel between start of motion and midpoint max of motion
-			ttt_1 = (int)(values[(currentMotionIndex + lastMotionIndex) / 2].xAccel
-				- values[lastMotionIndex + 2].xAccel);
-			ttt_2 = (int)(values[(currentMotionIndex + lastMotionIndex) / 2].yAccel
-				- values[lastMotionIndex + 2].yAccel);
-			float xDisplacement = 0;
-			float yDisplacement = 0;
-			float xVel = 0;
-			float yVel = 0;
-			for (int i = lastMotionIndex; i < (lastMotionIndex + currentMotionIndex) / 2; i++) {
-				int xVelPast = xVel;
-				int yVelPast = yVel;
-				xVel += 0.5 * (values[i].xAccel + values[i + 1].xAccel) * 0.05;
-				yVel += 0.5 * (values[i].yAccel + values[i + 1].yAccel) * 0.05;
-				xDisplacement += 0.05 * (xVel + xVelPast) * 0.5;
-				yDisplacement += 0.05 * (yVel + yVelPast) * 0.5;
+			float xAngle = 0;
+			float zAngle = 0;
+			for (int i = lastMotionIndex + 1; i < (lastMotionIndex + currentMotionIndex) / 2; i++) {
+				xAngle += 0.05 * (values[i].xRotation + values[i - 1].xRotation) * 0.5;
+				zAngle += 0.05 * (values[i].zRotation + values[i - 1].zRotation) * 0.5;
 			}
-			xDisplacement = fabs(xDisplacement);
-			yDisplacement = fabs(yDisplacement);
-			ttt_3 = (xDisplacement < yDisplacement) ?
-				(int)(2 * xDisplacement) : (int)(-yDisplacement * 2);
+			ttt_1 = (int)(xAngle / 1000);
+			ttt_2 = (int)(zAngle / 1000);
+			//TODO maybe threshold event time and assign to avg to ttt_1 and ttt_2
+			ttt_3 = (currentMotionIndex - lastMotionIndex) * 50;
 			ttt_mag_scale = (int)(sqrt(pow(ttt_1, 2) + pow(ttt_2, 2) + pow(ttt_3, 2)));
 
 
