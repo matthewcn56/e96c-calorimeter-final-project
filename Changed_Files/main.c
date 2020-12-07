@@ -1275,6 +1275,31 @@ int Accel_Gyro_Sensor_Handler(void* handle, void* handle_g, ANN* net, int prev_l
     }
     return prev_loc;
 }
+
+void updateMotions(int classification){
+     switch(classification){
+     case 0:
+         motions.numWalked+=2; // Add 2 since we classify steps by hand going out and back
+         break;
+     case 1:
+         motions.numRan+=2; // Add 2 since we classify steps by hand going out and back
+         break;
+     case 2:
+         motions.numStretch++;
+         break;
+     case 3:
+         motions.numPunch++;
+         break;
+     case 4:
+         motions.numSquat++;
+         break;
+     case 5:
+         motions.numJack++;
+         break;
+     default:
+         break;
+     }
+}
 #define WALK_MET 2
 #define WALK_PER_MIN 90
 
