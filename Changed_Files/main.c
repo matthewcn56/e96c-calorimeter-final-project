@@ -1266,6 +1266,7 @@ int Accel_Gyro_Sensor_Handler(void* handle, void* handle_g, ANN* net, int prev_l
                 CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
                 break;
             }
+            updateMotions(loc);
             if (isTransition == 2) {
                 currentMotionIndex = newCurrentIndex;
             }
