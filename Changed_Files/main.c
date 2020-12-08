@@ -113,12 +113,12 @@ struct DataPoint values[1000];
 
 struct MotionCount {
 
-    int numWalked=0;
+    int numWalked;
     int numRan;
-    int numStretch;
-    int numPunch;
-    int numSquat;
-    int numJack;
+    int numTricep;
+    int numLightTricep;
+    int numArnold;
+    int numLightArnold;
 
 };
 
@@ -137,7 +137,7 @@ static void initializeAllSensors(void);
 static volatile uint8_t hasTrained = 0;
 unsigned int training_cycles = TRAINING_CYCLES;
 void getAngularVelocity(void* handle_g, int* xyz) {
-   uint8_t id;
+    uint8_t id;
     SensorAxes_t angular_velocity;
     uint8_t status;
     BSP_GYRO_Get_Instance(handle_g, &id);
@@ -273,7 +273,6 @@ void getAccel(void* handle, int* xyz) {
 
 //Data updates every 50 milliseconds, may change to 20 depending on accuracy
 void updateData(void) {
-
     if (dataACQ > 50) {
         dataACQ = 0;
     }
@@ -294,7 +293,6 @@ void updateData(void) {
             arrIndex = 0;
         }
     }
-
 }
 
 /*
@@ -779,7 +777,7 @@ void getDataValues(void* handle, int* ttt_1, int* ttt_2,
     CDC_Fill_Buffer((uint8_t*)msg, strlen(msg));
     float xAngle[3] = {0,0,0};
     float zAngle[3] = {0,0,0};
-    
+
 
 
     int currentMotionIndex = 0, lastMotionIndex = 0;
@@ -799,7 +797,6 @@ void getDataValues(void* handle, int* ttt_1, int* ttt_2,
                 break;
             }
         }
-
         for (int i = lastMotionIndex; i < (currentMotionIndex + lastMotionIndex) / 2; i++) {
             int xAngleLast = xAngle[count];
             int zAngleLast = zAngle[count];
@@ -811,7 +808,7 @@ void getDataValues(void* handle, int* ttt_1, int* ttt_2,
         }
 
 
-       
+
         lastMotionIndex = currentMotionIndex;
         count++;
     }
@@ -913,28 +910,28 @@ void TrainOrientation(void* handle, void* handle_g, ANN* net) {
                     break;
 
                 case 2:
-                    sprintf(msg1, "\r\nStretch on LED on");
+                    sprintf(msg1, "\r\nPerform a tricep extension on LED on");
                     CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
 
                     getDataValues(handle, &ttt_1, &ttt_2, &ttt_3, &ttt_mag_scale);
                     break;
 
                 case 3:
-                    sprintf(msg1, "\r\nPunch on LED On");
+                    sprintf(msg1, "\r\nPerform a light tricep extension on LED On");
                     CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
 
                     getDataValues(handle, &ttt_1, &ttt_2, &ttt_3, &ttt_mag_scale);
                     break;
 
                 case 4:
-                    sprintf(msg1, "\r\nSquat on LED On");
+                    sprintf(msg1, "\r\nPerform an arnold press on LED On");
                     CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
 
                     getDataValues(handle, &ttt_1, &ttt_2, &ttt_3, &ttt_mag_scale);
                     break;
 
                 case 5:
-                    sprintf(msg1, "\r\nJumping jack on LED On");
+                    sprintf(msg1, "\r\nPerform a light arnold press on LED On");
                     CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
 
                     getDataValues(handle, &ttt_1, &ttt_2, &ttt_3, &ttt_mag_scale);
@@ -1074,244 +1071,330 @@ void TrainOrientation(void* handle, void* handle_g, ANN* net) {
 
 
 int Accel_Gyro_Sensor_Handler(void* handle, void* handle_g, ANN* net, int prev_loc) {
-	uint8_t id, id_g;
-	SensorAxes_t acceleration;
-	SensorAxes_t angular_velocity;
-	uint8_t status;
-	uint8_t status_g;
-	float xyz[3];
-	float XYZ[3];
-	float point;
-	int i, j, k, loc;
-	int ttt_1, ttt_2, ttt_3, ttt_mag_scale;
-	char msg1[512];
+    uint8_t id, id_g;
+    SensorAxes_t acceleration;
+    SensorAxes_t angular_velocity;
+    uint8_t status;
+    uint8_t status_g;
+    float xyz[3];
+    float XYZ[3];
+    float point;
+    int i, j, k, loc;
+    int ttt_1, ttt_2, ttt_3, ttt_mag_scale;
+    char msg1[512];
 
 
-	BSP_ACCELERO_Get_Instance(handle, &id);
-	BSP_ACCELERO_IsInitialized(handle, &status);
-	BSP_GYRO_Get_Instance(handle_g, &id_g);
-	BSP_GYRO_IsInitialized(handle_g, &status_g);
+    BSP_ACCELERO_Get_Instance(handle, &id);
+    BSP_ACCELERO_IsInitialized(handle, &status);
+    BSP_GYRO_Get_Instance(handle_g, &id_g);
+    BSP_GYRO_IsInitialized(handle_g, &status_g);
 
-	if (status == 1 && status_g == 1) {
-		if (BSP_GYRO_Get_Axes(handle_g, &angular_velocity) == COMPONENT_ERROR) {
-			angular_velocity.AXIS_X = 0;
-			angular_velocity.AXIS_Y = 0;
-			angular_velocity.AXIS_Z = 0;
-		}
-		if (BSP_ACCELERO_Get_Axes(handle, &acceleration) == COMPONENT_ERROR) {
-			acceleration.AXIS_X = 0;
-			acceleration.AXIS_Y = 0;
-			acceleration.AXIS_Z = 0;
-		}
+    if (status == 1 && status_g == 1) {
+        if (BSP_GYRO_Get_Axes(handle_g, &angular_velocity) == COMPONENT_ERROR) {
+            angular_velocity.AXIS_X = 0;
+            angular_velocity.AXIS_Y = 0;
+            angular_velocity.AXIS_Z = 0;
+        }
+        if (BSP_ACCELERO_Get_Axes(handle, &acceleration) == COMPONENT_ERROR) {
+            acceleration.AXIS_X = 0;
+            acceleration.AXIS_Y = 0;
+            acceleration.AXIS_Z = 0;
+        }
 
-		/*
-		 * Perform limited number of NN execution and prediction cycles.
-		 * Upon return, training will be repeated
-		 */
+        /*
+         * Perform limited number of NN execution and prediction cycles.
+         * Upon return, training will be repeated
+         */
 
-		k = 0;
-		int lastMotionIndex = 0;
-		int currentMotionIndex = 0;
-		arrIndex = 0; //Overwrites data in array to avoid using old values
-		sprintf(msg1, "\n\rBegin string of Motions!!!");
-		CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-		/*
-		for (int i = 0; i < 999; i++) {
-			sprintf(msg1, "\n\r %i %i %i", values[i].xAccel, values[i].yAccel, values[i].yRotation);
-			CDC_Fill_Buffer((uint8_t *) msg1, strlen(msg1));
-			HAL_Delay(100);
-		}
-		return 0;
-		*/
-		while (1) {
+        k = 0;
+        int lastMotionIndex = 0;
+        int currentMotionIndex = 0;
+        arrIndex = 0; //Overwrites data in array to avoid using old values
+        sprintf(msg1, "\n\rBegin string of Motions!!!");
+        CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+        /*
+        for (int i = 0; i < 999; i++) {
+            sprintf(msg1, "\n\r %i %i %i", values[i].xAccel, values[i].yAccel, values[i].yRotation);
+            CDC_Fill_Buffer((uint8_t *) msg1, strlen(msg1));
+            HAL_Delay(100);
+        }
+        return 0;
+        */
+        while (1) {
 
-			BSP_LED_Off(LED1);
+            BSP_LED_Off(LED1);
 
-			//Ensures that method lags behind updating array by at least 2 seconds
-			while (arrIndex - currentMotionIndex < 40) {
-				HAL_Delay(1000);
-			}
-			//Finds start and end of motion
-			uint8_t isTransition = 0;
-			uint16_t newCurrentIndex = 0;
-			for (int i = lastMotionIndex; i < 993; i++) {
-				if (i == 992) {
-					return 0;
-				}
-				//Prevents shaking x and y accels from being used, requires past 3 yRotations
-				//to be abs value less than 1000
-				if (i > 2 && i - lastMotionIndex < 10 && (values[i].yRotation > 1000 ||
-					values[i].yRotation < -1000 || values[i - 1].yRotation > 1000 ||
-					values[i - 1].yRotation < -1000 || values[i - 2].yRotation > 1000 ||
-					values[i - 2].yRotation < -1000)) {
-					currentMotionIndex++; //Bc current motion index will be eventually assigned to lastMotionIndex
-					continue;
-				}
-				//Prevents loop from accessing invalid elements by being too fast
-				while (arrIndex - i < 10) {
-					HAL_Delay(500);
-				}
-				/*
-				//TODO Arbitrary Values that must be changed
-				//Massive change in yRotation signaling lateral transition
-				//between movements
-				if (values[i].yRotation > 8000 || values[i].yRotation < -8000) {
-					isTransition = 1;
-					lastMotionIndex = currentMotionIndex;
-					currentMotionIndex = i;
-					i += 3;
-				}
-				//The sensortile is transitioning
-				if (isTransition == 1 && (values[i].yRotation < 100
-						&& values[i].yRotation > -100)) {
-					isTransition = 2;
-				}
-				//Rotate again to signal start of new action
-				if (isTransition == 2 && (values[i].yRotation > 8000 ||
-						values[i].yRotation < -8000)) {
-					isTransition = 0;
-					newCurrentIndex = i;
-				}
-				*/
-				if (isTransition == 0 && (values[i].yRotation > 2500 ||
-					values[i].yRotation < -2500)) {
-					lastMotionIndex = currentMotionIndex;
-					currentMotionIndex = i;
-					sprintf(msg1, "\r\n %i %i %i", arrIndex, lastMotionIndex, currentMotionIndex);
-					CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-					break;
-				}
-			}
-			float xAngle = 0;
-			float zAngle = 0;
-			for (int i = lastMotionIndex + 1; i < (lastMotionIndex + currentMotionIndex) / 2; i++) {
-				xAngle += 0.05 * (values[i].xRotation + values[i - 1].xRotation) * 0.5;
-				zAngle += 0.05 * (values[i].zRotation + values[i - 1].zRotation) * 0.5;
-			}
-			ttt_1 = (int)(xAngle / 1000);
-			ttt_2 = (int)(zAngle / 1000);
-			//TODO maybe threshold event time and assign to avg to ttt_1 and ttt_2
-			ttt_3 = (currentMotionIndex - lastMotionIndex) * 50;
-			ttt_mag_scale = (int)(sqrt(pow(ttt_1, 2) + pow(ttt_2, 2) + pow(ttt_3, 2)));
+            //Ensures that method lags behind updating array by at least 2 seconds
+            while (arrIndex - currentMotionIndex < 40) {
+                HAL_Delay(1000);
+            }
+            //Finds start and end of motion
+            uint8_t isTransition = 0;
+            uint16_t newCurrentIndex = 0;
+            for (int i = lastMotionIndex; i < 993; i++) {
+                if (i == 992) {
+                    return 0;
+                }
+                //Prevents shaking x and y accels from being used, requires past 3 yRotations
+                //to be abs value less than 1000
+                if (i > 2 && i - lastMotionIndex < 10 && (values[i].yRotation > 1000 ||
+                    values[i].yRotation < -1000 || values[i - 1].yRotation > 1000 ||
+                    values[i - 1].yRotation < -1000 || values[i - 2].yRotation > 1000 ||
+                    values[i - 2].yRotation < -1000)) {
+                    currentMotionIndex++; //Bc current motion index will be eventually assigned to lastMotionIndex
+                    continue;
+                }
+                //Prevents loop from accessing invalid elements by being too fast
+                while (arrIndex - i < 10) {
+                    HAL_Delay(500);
+                }
+                /*
+                //TODO Arbitrary Values that must be changed
+                //Massive change in yRotation signaling lateral transition
+                //between movements
+                if (values[i].yRotation > 8000 || values[i].yRotation < -8000) {
+                    isTransition = 1;
+                    lastMotionIndex = currentMotionIndex;
+                    currentMotionIndex = i;
+                    i += 3;
+                }
+                //The sensortile is transitioning
+                if (isTransition == 1 && (values[i].yRotation < 100
+                        && values[i].yRotation > -100)) {
+                    isTransition = 2;
+                }
+                //Rotate again to signal start of new action
+                if (isTransition == 2 && (values[i].yRotation > 8000 ||
+                        values[i].yRotation < -8000)) {
+                    isTransition = 0;
+                    newCurrentIndex = i;
+                }
+                */
+                if (isTransition == 0 && (values[i].yRotation > 2500 ||
+                    values[i].yRotation < -2500)) {
+                    lastMotionIndex = currentMotionIndex;
+                    currentMotionIndex = i;
+                    sprintf(msg1, "\r\n %i %i %i", arrIndex, lastMotionIndex, currentMotionIndex);
+                    CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+                    break;
+                }
+            }
+            float xAngle = 0;
+            float zAngle = 0;
+            for (int i = lastMotionIndex + 1; i < (lastMotionIndex + currentMotionIndex) / 2; i++) {
+                xAngle += 0.05 * (values[i].xRotation + values[i - 1].xRotation) * 0.5;
+                zAngle += 0.05 * (values[i].zRotation + values[i - 1].zRotation) * 0.5;
+            }
+            ttt_1 = (int)(xAngle / 1000);
+            ttt_2 = (int)(zAngle / 1000);
+            //TODO maybe threshold event time and assign to avg to ttt_1 and ttt_2
+            ttt_3 = (currentMotionIndex - lastMotionIndex) * 50;
+            ttt_mag_scale = (int)(sqrt(pow(ttt_1, 2) + pow(ttt_2, 2) + pow(ttt_3, 2)));
 
 
-			XYZ[0] = (float)ttt_1;
-			XYZ[1] = (float)ttt_2;
-			XYZ[2] = (float)ttt_3;
+            XYZ[0] = (float)ttt_1;
+            XYZ[1] = (float)ttt_2;
+            XYZ[2] = (float)ttt_3;
 
-			motion_softmax(net->topology[0], XYZ, xyz);
+            motion_softmax(net->topology[0], XYZ, xyz);
 
-			sprintf(msg1, "\r\n Softmax Input: \t");
-			CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-			for (j = 0; j < 3; j++) {
-				sprintf(msg1, "%i\t", (int)XYZ[j]);
-				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-			}
-			sprintf(msg1, "\r\n Softmax Output: \t");
-			CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-			for (j = 0; j < 3; j++) {
-				sprintf(msg1, "%i\t", (int)(100 * xyz[j]));
-				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-			}
-			sprintf(msg1, "\r\n");
+            sprintf(msg1, "\r\n Softmax Input: \t");
+            CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+            for (j = 0; j < 3; j++) {
+                sprintf(msg1, "%i\t", (int)XYZ[j]);
+                CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+            }
+            sprintf(msg1, "\r\n Softmax Output: \t");
+            CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+            for (j = 0; j < 3; j++) {
+                sprintf(msg1, "%i\t", (int)(100 * xyz[j]));
+                CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+            }
+            sprintf(msg1, "\r\n");
 
-			run_ann(net, xyz);
+            run_ann(net, xyz);
 
-			point = 0.0;
-			loc = -1;
+            point = 0.0;
+            loc = -1;
 
-			for (i = 0; i < net->topology[net->n_layers - 1]; i++) {
-				if (net->output[i] > point && net->output[i] > 0.1) {
-					point = net->output[i];
-					loc = i;
-				}
-			}
+            for (i = 0; i < net->topology[net->n_layers - 1]; i++) {
+                if (net->output[i] > point && net->output[i] > 0.1) {
+                    point = net->output[i];
+                    loc = i;
+                }
+            }
 
-			if (loc == -1) {
-				LED_Code_Blink(0);
-			}
-			else {
-				LED_Code_Blink(loc + 1);
-			}
+            if (loc == -1) {
+                LED_Code_Blink(0);
+            }
+            else {
+                LED_Code_Blink(loc + 1);
+            }
 
-			switch (loc) {
-			case 0:
-				sprintf(msg1, "\n\rNeural Network Classification - Walk");
-				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-				break;
-			case 1:
-				sprintf(msg1, "\n\rNeural Network Classification - Run");
-				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-				break;
-			case 2:
-				sprintf(msg1, "\n\rNeural Network Classification - Stretch");
-				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-				break;
-			case 3:
-				sprintf(msg1, "\n\rNeural Network Classification - Punch");
-				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-				break;
-			case 4:
-				sprintf(msg1, "\n\rNeural Network Classification - Squat");
-				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-				break;
-			case 5:
-				sprintf(msg1,
-					"\n\rNeural Network Classification - Jumping Jack");
-				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-				break;
-			case -1:
-				sprintf(msg1, "\n\rNeural Network Classification - ERROR");
-				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-				break;
-			default:
-				sprintf(msg1, "\n\rNeural Network Classification - NULL");
-				CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
-				break;
-			}
-			if (isTransition == 2) {
-				currentMotionIndex = newCurrentIndex;
-			}
-			lastMotionIndex = currentMotionIndex; //End of first motion is start of next
-			k = k + 1;
-		}
-	}
-	return prev_loc;
+            switch (loc) {
+            case 0:
+                sprintf(msg1, "\n\rNeural Network Classification - Walk");
+                CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+                break;
+            case 1:
+                sprintf(msg1, "\n\rNeural Network Classification - Run");
+                CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+                break;
+            case 2:
+                sprintf(msg1, "\n\rNeural Network Classification - Heavy Tricep Extension");
+                CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+                break;
+            case 3:
+                sprintf(msg1, "\n\rNeural Network Classification -Light Tricep Extension ");
+                CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+                break;
+            case 4:
+                sprintf(msg1, "\n\rNeural Network Classification - Arnold Press");
+                CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+                break;
+            case 5:
+                sprintf(msg1,
+                    "\n\rNeural Network Classification - Light Arnold Press");
+                CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+                break;
+            case -1:
+                sprintf(msg1, "\n\rNeural Network Classification - ERROR");
+                CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+                break;
+            default:
+                sprintf(msg1, "\n\rNeural Network Classification - NULL");
+                CDC_Fill_Buffer((uint8_t*)msg1, strlen(msg1));
+                break;
+            }
+            updateMotions(loc);
+            if (isTransition == 2) {
+                currentMotionIndex = newCurrentIndex;
+            }
+            lastMotionIndex = currentMotionIndex; //End of first motion is start of next
+            k = k + 1;
+        }
+    }
+    return prev_loc;
 }
 
 void updateMotions(int classification){
-    switch(classification){
-    case 0:
-        motions.numWalked+=2; // Add 2 since we classify steps by hand going out and back
-        break;
-    case 1:
-        motions.numRan+=2; // Add 2 since we classify steps by hand going out and back
-        break;
-    case 2:
-        motions.numStretch++;
-        break;
-    case 3:
-        motions.numPunch++;
-        break;
-    case 4:
-        motions.numSquat++;
-        break;
-    case 5:
-        motions.numJack++;
-        break;
-    default:
-        break;
-    }
+     switch(classification){
+     case 0:
+         motions.numWalked+=2; // Add 2 since we classify steps by hand going out and back
+         break;
+     case 1:
+         motions.numRan+=2; // Add 2 since we classify steps by hand going out and back
+         break;
+     case 2:
+         motions.numStretch++;
+         break;
+     case 3:
+         motions.numPunch++;
+         break;
+     case 4:
+         motions.numSquat++;
+         break;
+     case 5:
+         motions.numJack++;
+         break;
+     default:
+         break;
+     }
+}
+#define WALK_MET 2
+#define WALK_PER_MIN 90
 
-//void processData(int weight){
-//    double walkedCalories
-//    sprintf(dataOut, "\r\nYou walked %i\tsteps which burned %i calories",
-//            motions.numWalked, )
-////    sprintf(dataOut, "\r\nState %i\tMax %i\tMean %i\t\tZ-score %i\tOutputs",
-////            loc, (int)(100 * point), (int)(100 * mean_output),
-////            (int)(100 * classification_metric));
-////        CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
-//}
+#define RUN_MET 160
+#define RUN_PER_MIN 7
+
+#define TRICEP_MET 3
+#define TRICEP_PER_MIN 20
+
+#define LIGHT_TRICEP_MET 2.5
+#define LIGHT_TRICEP_PER_MIN 40
+
+#define ARNOLD_MET 4
+#define ARNOLD_PER_MIN 15
+
+#define LIGHT_ARNOLD_MET 3
+#define LIGHT_ARNOLD_PER_MIN 30
+
+
+void processData(int weight){
+
+    double totalCalories=0;
+    int totalExercises=0;
+    double walkCalories;
+    walkCalories = (WALK_MET * 3.5 * weight)/200 * (1/WALK_PER_MIN)* motions.numWalked;
+    totalCalories+=walkCalories;
+    totalExercises+=motions.numWalked;
+
+    double runCalories;
+    runCalories = (RUN_MET * 3.5 * weight)/200 * (1/RUN_PER_MIN)* motions.numRan;
+    totalCalories+= runCalories;
+    totalExercises+=motions.numRan;
+
+    double tricepCalories;
+    tricepCalories = (TRICEP_MET * 3.5 * weight)/200 * (1/TRICEP_PER_MIN)* motions.numTricep;
+    totalCalories += tricepCalories;
+    totalExercises+=motions.numTricep;
+
+    double lightTricepCalories;
+    lightTricepCalories = (LIGHT_TRICEP_MET * 3.5 * weight)/200 * (1/LIGHT_TRICEP_PER_MIN)* motions.numLightTricep;
+    totalCalories+= lightTricepCalories;
+    totalExercsies+=motions.numLightTricep;
+
+    double arnoldCalories;
+    arnoldCalories = (ARNOLD_MET * 3.5 * weight)/200 * (1/ARNOLD_PER_MIN)* motions.numArnold;
+    totalCalories+= arnoldCalories;
+    totalExercises+=motions.numArnold;
+
+    double lightArnoldCalories;
+    lightArnoldCalories = (LIGHT_ARNOLD_MET * 3.5 * weight)/200 * (1/LIGHT_ARNOLD_PER_MIN)* motions.numLightArnold;
+    totalCalories += lightArnoldCalories;
+    totalExercises+=motions.numLightArnold;
+
+    sprintf(dataOut, "\r\nYou walked %i\tsteps which burned %.3f\tcalories",
+            motions.numWalked, walkCalories);
+    CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+
+    sprintf(dataOut, "\r\nYou ran %i\tsteps which burned %.3f\tcalories",
+                motions.numRan, runCalories);
+    CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+
+    sprintf(dataOut, "\r\nYou performed a tricep extension %i\ttimes which burned %.3f\tcalories",
+                motions.numTricep, tricepCalories);
+    CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+
+    sprintf(dataOut, "\r\nYou performed a light tricep extension %i\ttimes which burned %.3f\tcalories",
+                motions.numLightTricep, lightTricepCalories);
+    CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+
+    sprintf(dataOut, "\r\nYou performed an arnold press %i\ttimes which burned %.3f\tcalories",
+                    motions.numArnold, arnoldCalories);
+    CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+
+    sprintf(dataOut, "\r\nYou did %i\tlight arnold presses which burned %.3f\tcalories",
+                        motions.numLightArnold, lightArnoldCalories);
+    CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+
+    sprintf(dataOut, "\r\nIn total, you completed %i\texercises which burned %.3f\tcalories",
+            totalExercises, totalCalories);
+    CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+
+    double hourlyCalories= totalCalories*3600/50;
+    sprintf(dataOut, "\r\nIf you did these exercises for one hour, you would have burned%.3f\tcalories",
+                hourlyCalories);
+        CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+
+
+
+
+//    sprintf(dataOut, "\r\nState %i\tMax %i\tMean %i\t\tZ-score %i\tOutputs",
+//            loc, (int)(100 * point), (int)(100 * mean_output),
+//            (int)(100 * classification_metric));
+//        CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+}
 
 int main(void) {
     uint32_t msTick, msTickPrev = 0;
@@ -1330,10 +1413,10 @@ int main(void) {
 
     motions.numWalked=0;
     motions.numRan=0;
-    motions.numStretch =0;
-    motions.numPunch =0;
-    motions.numSquat =0;
-    motions.numJack =0;
+    motions.numTricep =0;
+    motions.numLightTricep =0;
+    motions.numArnold =0;
+    motions.numLightArnold =0;
     /* Configure the system clock */
     SystemClock_Config();
 
@@ -1463,9 +1546,9 @@ int main(void) {
                 loc = Accel_Gyro_Sensor_Handler(LSM6DSM_X_0_handle, LSM6DSM_G_0_handle,
                     &net, loc);
                 //After returning from Accel_Gyro_Sensor_Handler, process data
-                //TODO Finish processData function
-                //processData(userWeight);
-
+                processData(userWeight);
+                //Will no longer initiate retraining, simply ends.
+                //TODO implement timer inside Accel_Gyro to exit once we reach a time threshold
 //                /*
 //                 * Upon return from Accel_Sensor_Handler, initiate retraining.
 //                 */
@@ -1735,5 +1818,3 @@ void assert_failed(uint8_t* file, uint32_t line)
 #endif
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
-
-
