@@ -952,72 +952,121 @@ int Accel_Gyro_Sensor_Handler(void* handle, void* handle_g, ANN* net, int prev_l
 	return prev_loc;
 }
 
-void processData(int weight) {
-	char dataOut[512];
-	double totalCalories = 0;
-	int totalExercises = 0;
-	double walkCalories;
-	walkCalories = (WALK_MET * 3.5 * weight) / 200 * (1 / WALK_PER_MIN) * motions.numWalked;
-	totalCalories += walkCalories;
-	totalExercises += motions.numWalked;
 
-	double runCalories;
-	runCalories = (RUN_MET * 3.5 * weight) / 200 * (1 / RUN_PER_MIN) * motions.numRan;
-	totalCalories += runCalories;
-	totalExercises += motions.numRan;
+void updateMotions(int classification){
+     switch(classification){
+     case 0:
+         motions.numWalked+=2; // Add 2 since we classify steps by hand going out and back
+         break;
+     case 1:
+         motions.numRan+=2; // Add 2 since we classify steps by hand going out and back
+         break;
+     case 2:
+         motions.numStretch++;
+         break;
+     case 3:
+         motions.numPunch++;
+         break;
+     case 4:
+         motions.numSquat++;
+         break;
+     case 5:
+         motions.numJack++;
+         break;
+     default:
+         break;
+     }
+}
+#define WALK_MET 2
+#define WALK_PER_MIN 90
 
-	double tricepCalories;
-	tricepCalories = (TRICEP_MET * 3.5 * weight) / 200 * (1 / TRICEP_PER_MIN) * motions.numTricep;
-	totalCalories += tricepCalories;
-	totalExercises += motions.numTricep;
+#define RUN_MET 160
+#define RUN_PER_MIN 7
 
-	double lightTricepCalories;
-	lightTricepCalories = (LIGHT_TRICEP_MET * 3.5 * weight) / 200 * (1 / LIGHT_TRICEP_PER_MIN) * motions.numLightTricep;
-	totalCalories += lightTricepCalories;
-	totalExercises += motions.numLightTricep;
+#define TRICEP_MET 3
+#define TRICEP_PER_MIN 20
 
-	double arnoldCalories;
-	arnoldCalories = (ARNOLD_MET * 3.5 * weight) / 200 * (1 / ARNOLD_PER_MIN) * motions.numArnold;
-	totalCalories += arnoldCalories;
-	totalExercises += motions.numArnold;
+#define LIGHT_TRICEP_MET 2.5
+#define LIGHT_TRICEP_PER_MIN 40
 
-	double lightArnoldCalories;
-	lightArnoldCalories = (LIGHT_ARNOLD_MET * 3.5 * weight) / 200 * (1 / LIGHT_ARNOLD_PER_MIN) * motions.numLightArnold;
-	totalCalories += lightArnoldCalories;
-	totalExercises += motions.numLightArnold;
+#define ARNOLD_MET 4
+#define ARNOLD_PER_MIN 15
 
-	sprintf(dataOut, "\r\nYou walked %i\tsteps which burned %.3f\tcalories",
-		motions.numWalked, walkCalories);
-	CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+#define LIGHT_ARNOLD_MET 3
+#define LIGHT_ARNOLD_PER_MIN 30
 
-	sprintf(dataOut, "\r\nYou ran %i\tsteps which burned %.3f\tcalories",
-		motions.numRan, runCalories);
-	CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
 
-	sprintf(dataOut, "\r\nYou performed a tricep extension %i\ttimes which burned %.3f\tcalories",
-		motions.numTricep, tricepCalories);
-	CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+void processData(int weight){
 
-	sprintf(dataOut, "\r\nYou performed a light tricep extension %i\ttimes which burned %.3f\tcalories",
-		motions.numLightTricep, lightTricepCalories);
-	CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+    double totalCalories=0;
+    int totalExercises=0;
+    double walkCalories;
+    walkCalories = (WALK_MET * 3.5 * weight)/200.0 * (1.0/WALK_PER_MIN)* motions.numWalked;
+    totalCalories+=walkCalories;
+    totalExercises+=motions.numWalked;
 
-	sprintf(dataOut, "\r\nYou performed an arnold press %i\ttimes which burned %.3f\tcalories",
-		motions.numArnold, arnoldCalories);
-	CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+    double runCalories;
+    runCalories = (RUN_MET * 3.5 * weight)/200.0 * (1.0/RUN_PER_MIN)* motions.numRan;
+    totalCalories+= runCalories;
+    totalExercises+=motions.numRan;
 
-	sprintf(dataOut, "\r\nYou did %i\tlight arnold presses which burned %.3f\tcalories",
-		motions.numLightArnold, lightArnoldCalories);
-	CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+    double tricepCalories;
+    tricepCalories = (TRICEP_MET * 3.5 * weight)/200.0 * (1.0/TRICEP_PER_MIN)* motions.numTricep;
+    totalCalories += tricepCalories;
+    totalExercises+=motions.numTricep;
 
-	sprintf(dataOut, "\r\nIn total, you completed %i\texercises which burned %.3f\tcalories",
-		totalExercises, totalCalories);
-	CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+    double lightTricepCalories;
+    lightTricepCalories = (LIGHT_TRICEP_MET * 3.5 * weight)/200.0 * (1.0/LIGHT_TRICEP_PER_MIN)* motions.numLightTricep;
+    totalCalories+= lightTricepCalories;
+    totalExercises+=motions.numLightTricep;
 
-	double hourlyCalories = totalCalories * 3600 / 50;
-	sprintf(dataOut, "\r\nIf you did these exercises for one hour, you would have burned%.3f\tcalories",
-		hourlyCalories);
-	CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+    double arnoldCalories;
+    arnoldCalories = (ARNOLD_MET * 3.5 * weight)/200.0 * (1.0/ARNOLD_PER_MIN)* motions.numArnold;
+    totalCalories+= arnoldCalories;
+    totalExercises+=motions.numArnold;
+
+    double lightArnoldCalories;
+    lightArnoldCalories = (LIGHT_ARNOLD_MET * 3.5 * weight)/200.0 * (1.0/LIGHT_ARNOLD_PER_MIN)* motions.numLightArnold;
+    totalCalories += lightArnoldCalories;
+    totalExercises+=motions.numLightArnold;
+
+    sprintf(dataOut, "\r\nYou performed a walking step %i times which burned %.3f calories",
+            motions.numWalked, walkCalories);
+    CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+
+    sprintf(dataOut, "\r\nYou performed a running step %i times which burned %.3f calories",
+                motions.numRan, runCalories);
+    CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+
+    sprintf(dataOut, "\r\nYou performed a tricep extension %i times which burned %.3f calories",
+                motions.numTricep, tricepCalories);
+    CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+
+    sprintf(dataOut, "\r\nYou performed a light tricep extension %i times which burned %.3f calories",
+                motions.numLightTricep, lightTricepCalories);
+    CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+
+    sprintf(dataOut, "\r\nYou performed an arnold press %i times which burned %.3f calories",
+                    motions.numArnold, arnoldCalories);
+    CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+
+    sprintf(dataOut, "\r\nYou performed a light arnold press %i times which burned %.3f calories",
+                        motions.numLightArnold, lightArnoldCalories);
+    CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+
+    sprintf(dataOut, "\r\nIn total, you completed %i exercises which burned %.3f calories",
+            totalExercises, totalCalories);
+    CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+
+    double hourlyCalories= totalCalories*3600/50;
+    sprintf(dataOut, "\r\nIf you did these exercises for one hour, you would have burned %.3f calories",
+                hourlyCalories);
+        CDC_Fill_Buffer((uint8_t*)dataOut, strlen(dataOut));
+
+
+
+
+
 }
 
 int main(void) {
